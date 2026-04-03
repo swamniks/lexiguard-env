@@ -1,0 +1,18 @@
+name: "LexiGuard"
+description: "Legal contract review and risk analysis environment with three graded tasks."
+entrypoint: "env.environment:make"
+tasks:
+  - id: clause_identification
+    difficulty: easy
+    summary: Identify clause type (termination notice)
+  - id: risk_classification
+    difficulty: medium
+    summary: Label supplier risk level of indemnity clause
+  - id: contract_negotiation
+    difficulty: hard
+    summary: Redline to reduce supplier liability exposure
+reward:
+  range: [0.0, 1.0]
+  shaping: true
+author: "LexiGuard"
+version: "1.0.0"
