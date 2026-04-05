@@ -4,10 +4,12 @@ emoji: ⚖️
 colorFrom: blue
 colorTo: purple
 sdk: docker
+sdk_version: "0.0.1"
 app_file: inference.py
 pinned: false
 ---
-# LexiGuard OpenEnv
+
+# ⚖️ LexiGuard OpenEnv
 
 Legal-contract review environment with deterministic graders and reward shaping. Provides three tasks (easy/medium/hard) that exercise clause spotting, risk assessment, and negotiation.
 
