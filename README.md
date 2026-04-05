@@ -1,3 +1,11 @@
+---
+title: LexiGuard OpenEnv
+emoji: ⚖️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---
 # LexiGuard OpenEnv
 
 Legal-contract review environment with deterministic graders and reward shaping. Provides three tasks (easy/medium/hard) that exercise clause spotting, risk assessment, and negotiation.
