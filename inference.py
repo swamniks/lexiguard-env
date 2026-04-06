@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Optional, List
 
 from openai import OpenAI, OpenAIError
 
@@ -9,11 +9,17 @@ from env.environment import LexiGuardEnv
 from env.models import Action, Observation
 
 
-# ✅ Use Hugging Face router (correct for hackathon)
+# ================= CONFIG =================
+
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
+TASK_NAME = "lexiguard"
+BENCHMARK = "lexiguard-openenv"
+
+
+# ================= LLM =================
 
 def _call_llm(client: OpenAI, obs: Observation) -> str:
     system = "You are an expert commercial lawyer. Respond concisely."
@@ -51,28 +57,62 @@ def heuristic_policy(obs: Observation) -> str:
     return "No response."
 
 
+# ================= MAIN =================
+
 def run_episode(client: Optional[OpenAI] = None) -> None:
     env = LexiGuardEnv()
     obs = env.reset()
 
-    # ✅ FIX: pass API key properly
     client = client or OpenAI(
-    base_url=API_BASE_URL,
-    api_key=os.getenv("HF_TOKEN")
-)
+        base_url=API_BASE_URL,
+        api_key=API_KEY,
+    )
+
+    step = 0
+    rewards: List[float] = []
+    success = True
+
+    print(f"[START] task={TASK_NAME} env={BENCHMARK} model={MODEL_NAME}")
+
     done = False
 
     while not done:
-        response = _call_llm(client, obs)
+        step += 1
 
-        action = Action(
-            task_id=obs.task_id,
-            response=response
-        )
+        try:
+            response = _call_llm(client, obs)
 
-        obs, reward, done, info = env.step(action)
+            action = Action(
+                task_id=obs.task_id,
+                response=response
+            )
 
-        print(f"[{info['task_id']}] score={reward.score:.2f} feedback={reward.feedback}")
+            obs, reward, done, info = env.step(action)
+
+            rewards.append(round(reward.score, 2))
+
+            print(
+                f"[STEP] step={step} action=generated_response "
+                f"reward={reward.score:.2f} done={str(done).lower()} error=null"
+            )
+
+        except Exception as e:
+            success = False
+            error_msg = str(e)
+
+            print(
+                f"[STEP] step={step} action=error "
+                f"reward=0.00 done=true error={error_msg}"
+            )
+            break
+
+    total_score = sum(rewards) / len(rewards) if rewards else 0.0
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+
+    print(
+        f"[END] success={str(success).lower()} steps={step} "
+        f"score={total_score:.2f} rewards={rewards_str}"
+    )
 
 
 if __name__ == "__main__":
