@@ -4,15 +4,14 @@ from env.models import Action
 from inference import _call_llm
 from openai import OpenAI
 import os
+import uvicorn
 
 app = FastAPI()
 
-# ================= CONFIG =================
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-# ================= GLOBAL ENV =================
 env = LexiGuardEnv()
 current_obs = None
 done = False
@@ -23,7 +22,6 @@ client = OpenAI(
     api_key=API_KEY,
 )
 
-# ================= ROUTES =================
 
 @app.get("/")
 def home():
@@ -40,8 +38,7 @@ def reset():
 
     return {
         "message": "Environment reset",
-        "task": current_obs.task_id,
-        "difficulty": current_obs.metadata.get("difficulty")
+        "task": current_obs.task_id
     }
 
 
@@ -52,27 +49,20 @@ def step():
     if done:
         return {"error": "Episode finished. Call /reset first."}
 
-    try:
-        response = _call_llm(client, current_obs)
+    response = _call_llm(client, current_obs)
 
-        action = Action(
-            task_id=current_obs.task_id,
-            response=response
-        )
+    action = Action(task_id=current_obs.task_id, response=response)
 
-        current_obs, reward, done, info = env.step(action)
+    current_obs, reward, done, info = env.step(action)
 
-        scores.append(round(reward.score, 2))
+    scores.append(round(reward.score, 2))
 
-        return {
-            "task": info["task_id"],
-            "reward": reward.score,
-            "done": done,
-            "scores_so_far": scores
-        }
-
-    except Exception as e:
-        return {"error": str(e)}
+    return {
+        "task": info["task_id"],
+        "reward": reward.score,
+        "done": done,
+        "scores_so_far": scores
+    }
 
 
 @app.get("/state")
@@ -82,3 +72,12 @@ def state():
         "scores": scores,
         "average_score": round(sum(scores)/len(scores), 2) if scores else 0
     }
+
+
+# ✅ REQUIRED BY OPENENV
+def main():
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()
