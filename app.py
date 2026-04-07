@@ -7,50 +7,78 @@ import os
 
 app = FastAPI()
 
+# ================= CONFIG =================
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
+# ================= GLOBAL ENV =================
+env = LexiGuardEnv()
+current_obs = None
+done = False
+scores = []
 
-def run_full_episode():
-    env = LexiGuardEnv()
-    obs = env.reset()
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=API_KEY,
+)
 
-    client = OpenAI(
-        base_url=API_BASE_URL,
-        api_key=API_KEY,
-    )
-
-    scores = []
-
-    done = False
-    while not done:
-        response = _call_llm(client, obs)
-
-        action = Action(task_id=obs.task_id, response=response)
-
-        obs, reward, done, info = env.step(action)
-
-        scores.append(round(reward.score, 2))
-
-    return scores
-
+# ================= ROUTES =================
 
 @app.get("/")
 def home():
     return {"message": "LexiGuard OpenEnv running"}
 
 
-@app.get("/state")
-def get_state():
-    scores = run_full_episode()
+@app.post("/reset")
+def reset():
+    global current_obs, done, scores
+
+    current_obs = env.reset()
+    done = False
+    scores = []
 
     return {
-        "tasks": [
-            "clause_identification",
-            "risk_classification",
-            "contract_negotiation"
-        ],
+        "message": "Environment reset",
+        "task": current_obs.task_id,
+        "difficulty": current_obs.metadata.get("difficulty")
+    }
+
+
+@app.post("/step")
+def step():
+    global current_obs, done, scores
+
+    if done:
+        return {"error": "Episode finished. Call /reset first."}
+
+    try:
+        response = _call_llm(client, current_obs)
+
+        action = Action(
+            task_id=current_obs.task_id,
+            response=response
+        )
+
+        current_obs, reward, done, info = env.step(action)
+
+        scores.append(round(reward.score, 2))
+
+        return {
+            "task": info["task_id"],
+            "reward": reward.score,
+            "done": done,
+            "scores_so_far": scores
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/state")
+def state():
+    return {
+        "done": done,
         "scores": scores,
-        "average_score": round(sum(scores) / len(scores), 2)
+        "average_score": round(sum(scores)/len(scores), 2) if scores else 0
     }
