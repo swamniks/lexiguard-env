@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List
-
-from openai import OpenAI, OpenAIError
+from typing import List
 
 from env.environment import LexiGuardEnv
 from env.models import Action, Observation
@@ -19,28 +17,7 @@ TASK_NAME = "lexiguard"
 BENCHMARK = "lexiguard-openenv"
 
 
-# ================= LLM =================
-
-def _call_llm(client: OpenAI, obs: Observation) -> str:
-    system = "You are an expert commercial lawyer. Respond concisely."
-
-    try:
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": f"Task: {obs.task_id}\n{obs.prompt}",
-                },
-            ],
-            max_tokens=200,
-        )
-        return completion.choices[0].message.content.strip()
-
-    except Exception:
-        return heuristic_policy(obs)
-
+# ================= FALLBACK =================
 
 def heuristic_policy(obs: Observation) -> str:
     tid = obs.task_id
@@ -57,54 +34,103 @@ def heuristic_policy(obs: Observation) -> str:
     return "No response."
 
 
+# ================= SAFE STRING =================
+
+def sanitize(text: str) -> str:
+    if not isinstance(text, str):
+        return "invalid_response"
+    return (
+        text.replace("\n", " ")
+        .replace("\r", " ")
+        .replace(" ", "_")
+        .replace(".", "")   
+        .replace(",", "")
+        .replace("|", "_")
+    )[:60]
+
+
+# ================= SAFE LLM =================
+
+def _call_llm(client, obs: Observation) -> str:
+    if client is None:
+        return heuristic_policy(obs)
+
+    try:
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "You are an expert lawyer."},
+                {"role": "user", "content": f"{obs.prompt}"},
+            ],
+            max_tokens=200,
+        )
+        return completion.choices[0].message.content or ""
+    except Exception:
+        return heuristic_policy(obs)
+
+
 # ================= MAIN =================
 
-def run_episode(client: Optional[OpenAI] = None) -> None:
-    env = LexiGuardEnv()
-    obs = env.reset()
-
-    client = client or OpenAI(
-        base_url=API_BASE_URL,
-        api_key=API_KEY,
-    )
-
+def run_episode() -> None:
     step = 0
     rewards: List[float] = []
     success = True
 
     print(f"[START] task={TASK_NAME} env={BENCHMARK} model={MODEL_NAME}")
 
-    done = False
+    try:
+        env = LexiGuardEnv()
+        obs = env.reset()
 
-    while not done:
-        step += 1
+        # SAFE CLIENT INIT
+        client = None
+        if API_KEY:
+            try:
+                from openai import OpenAI
+                client = OpenAI(
+                    base_url=API_BASE_URL,
+                    api_key=API_KEY,
+                )
+            except Exception:
+                client = None
 
-        try:
-            response = _call_llm(client, obs)
+        done = False
 
-            action = Action(
-                task_id=obs.task_id,
-                response=response
-            )
+        while not done:
+            step += 1
 
-            obs, reward, done, info = env.step(action)
+            try:
+                response = _call_llm(client, obs)
+                safe_action = sanitize(response)
 
-            rewards.append(round(reward.score, 2))
+                action = Action(task_id=obs.task_id, response=response)
 
-            print(
-                f"[STEP] step={step} action=generated_response "
-                f"reward={reward.score:.2f} done={str(done).lower()} error=null"
-            )
+                obs, reward, done, info = env.step(action)
 
-        except Exception as e:
-            success = False
-            error_msg = str(e)
+                rewards.append(round(reward.score, 2))
 
-            print(
-                f"[STEP] step={step} action=error "
-                f"reward=0.00 done=true error={error_msg}"
-            )
-            break
+                print(
+                    f"[STEP] step={step} action={safe_action} "
+                    f"reward={reward.score:.2f} done={str(done).lower()} error=null"
+                )
+
+            except Exception as e:
+                success = False
+                err = sanitize(str(e))
+
+                print(
+                    f"[STEP] step={step} action=error "
+                    f"reward=0.00 done=true error={err}"
+                )
+                break
+
+    except Exception as e:
+        success = False
+        err = sanitize(str(e))
+
+        print(
+            f"[STEP] step=0 action=error reward=0.00 done=true error={err}"
+        )
 
     total_score = sum(rewards) / len(rewards) if rewards else 0.0
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
@@ -116,4 +142,7 @@ def run_episode(client: Optional[OpenAI] = None) -> None:
 
 
 if __name__ == "__main__":
-    run_episode()
+    try:
+        run_episode()
+    except Exception:
+        print("[END] success=false steps=0 score=0.00 rewards=")
