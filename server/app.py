@@ -17,10 +17,16 @@ current_obs = None
 done = False
 scores = []
 
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=API_KEY,
-)
+# 🔥 SAFE CLIENT INIT (avoid crash if no key)
+client = None
+if API_KEY:
+    try:
+        client = OpenAI(
+            base_url=API_BASE_URL,
+            api_key=API_KEY,
+        )
+    except Exception:
+        client = None
 
 
 @app.get("/")
@@ -34,7 +40,7 @@ def reset():
 
     current_obs = env.reset()
     done = False
-    scores = []
+    scores = []  # 🔥 RESET SCORES
 
     return {
         "message": "Environment reset",
@@ -44,14 +50,14 @@ def reset():
 
 @app.post("/step")
 def step():
-    global env, current_obs, client
+    global env, current_obs, client, scores, done
 
     try:
         # Extract safely
         task_id = getattr(current_obs, "task_id", "unknown")
         prompt = getattr(current_obs, "prompt", "")
 
-        # 🔥 FIX: correct function call
+        # Correct LLM call
         response = _call_llm(client, task_id, prompt)
 
         action = Action(
@@ -60,6 +66,9 @@ def step():
         )
 
         current_obs, reward, done, info = env.step(action)
+
+        # 🔥 FIX: STORE SCORE
+        scores.append(reward.score)
 
         return {
             "task_id": task_id,
@@ -74,12 +83,17 @@ def step():
             "done": True
         }
 
+
 @app.get("/state")
 def state():
+    global scores, done
+
+    avg = sum(scores) / len(scores) if scores else 0.0
+
     return {
         "done": done,
         "scores": scores,
-        "average_score": round(sum(scores)/len(scores), 2) if scores else 0
+        "average_score": round(avg, 2)
     }
 
 
