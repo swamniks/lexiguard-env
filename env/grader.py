@@ -28,14 +28,7 @@ def grade_clause_identification(action: Action) -> float:
     if "without cause" in text:
         pos += 0.2
 
-    score = _normalized_score(pos, neg, 1.2)
-
-    return Reward(
-        task_id="clause_identification",
-        score=score,
-        feedback="clause grading",
-        details={}
-    )
+    return _normalized_score(pos, neg, 1.2)  # ✅ returns float
 
 
 # ================= TASK 2 =================
@@ -54,14 +47,7 @@ def grade_risk_classification(action: Action) -> float:
     if _contains_any(text, ("unlimited", "no cap")):
         pos += 0.15
 
-    score = _normalized_score(pos, neg, 1.05)
-
-    return Reward(
-        task_id="risk_classification",
-        score=score,
-        feedback="risk grading",
-        details={}
-    )
+    return _normalized_score(pos, neg, 1.05)  # ✅ returns float
 
 
 # ================= TASK 3 =================
@@ -79,17 +65,9 @@ def grade_contract_negotiation(action: Action) -> float:
     if "mutual" in text:
         pos += 0.1
 
-    score = _normalized_score(pos, neg, 0.9)
-
-    return Reward(
-        task_id="contract_negotiation",
-        score=score,
-        feedback="negotiation grading",
-        details={}
-    )
+    return _normalized_score(pos, neg, 0.9)  # ✅ returns float
 
 
-# 🔥 CRITICAL: SIMPLE STRING MAP (THIS IS WHAT VALIDATOR NEEDS)
 GRADERS = {
     "clause_identification": grade_clause_identification,
     "risk_classification": grade_risk_classification,
@@ -101,12 +79,10 @@ def grade(action: Action) -> Reward:
     if action.task_id not in GRADERS:
         return Reward(task_id=action.task_id, score=0.0, feedback="invalid task", details={})
 
-    score = GRADERS[action.task_id](action)  # now gets float
+    score = GRADERS[action.task_id](action)  # ✅ gets float
     return Reward(
         task_id=action.task_id,
         score=score,
         feedback=f"{action.task_id} grading",
         details={}
     )
-
-    return GRADERS[action.task_id](action)

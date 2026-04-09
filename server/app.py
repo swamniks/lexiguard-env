@@ -17,14 +17,10 @@ current_obs = None
 done = False
 scores = []
 
-# 🔥 SAFE CLIENT INIT (avoid crash if no key)
 client = None
 if API_KEY:
     try:
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=API_KEY,
-        )
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     except Exception:
         client = None
 
@@ -37,11 +33,9 @@ def home():
 @app.post("/reset")
 def reset():
     global current_obs, done, scores
-
     current_obs = env.reset()
     done = False
-    scores = []  # 🔥 RESET SCORES
-
+    scores = []
     return {
         "message": "Environment reset",
         "task": current_obs.task_id
@@ -52,23 +46,26 @@ def reset():
 def step():
     global env, current_obs, client, scores, done
 
+    # ✅ Guard: must call /reset first
+    if current_obs is None:
+        current_obs = env.reset()
+        done = False
+        scores = []
+
+    if done:
+        return {"error": "Episode already done. Call /reset to start again.", "done": True}
+
     try:
-        # Extract safely
         task_id = getattr(current_obs, "task_id", "unknown")
         prompt = getattr(current_obs, "prompt", "")
 
-        # Correct LLM call
         response = _call_llm(client, task_id, prompt)
 
-        action = Action(
-            task_id=task_id,
-            response=response
-        )
+        action = Action(task_id=task_id, response=response)
 
         current_obs, reward, done, info = env.step(action)
 
-        # 🔥 FIX: STORE SCORE
-        scores.append(reward.score)
+        scores.append(reward.score)  # ✅ reward.score is now a clean float
 
         return {
             "task_id": task_id,
@@ -78,18 +75,13 @@ def step():
         }
 
     except Exception as e:
-        return {
-            "error": str(e),
-            "done": True
-        }
+        return {"error": str(e), "done": True}
 
 
 @app.get("/state")
 def state():
     global scores, done
-
     avg = sum(scores) / len(scores) if scores else 0.0
-
     return {
         "done": done,
         "scores": scores,
@@ -97,7 +89,6 @@ def state():
     }
 
 
-# ✅ REQUIRED BY OPENENV
 def main():
     uvicorn.run(app, host="0.0.0.0", port=7860)
 
