@@ -169,6 +169,13 @@ GRADERS = {
 
 
 def grade(action: Action) -> Reward:
-    task: Task = TASK_MAP[action.task_id]
-    grader = GRADERS[task.task_id]
-    return grader(action)
+    # 🔥 DIRECT MAPPING (validator-friendly)
+    if action.task_id not in GRADERS:
+        return Reward(
+            task_id=action.task_id,
+            score=0.0,
+            feedback="No grader found for task",
+            details={}
+        )
+
+    return GRADERS[action.task_id](action)
