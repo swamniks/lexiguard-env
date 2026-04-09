@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from env.environment import LexiGuardEnv
 from env.models import Action
+from env.grader import GRADERS
 from inference import _call_llm
 from openai import OpenAI
 import os
@@ -30,6 +31,40 @@ def home():
     return {"message": "LexiGuard OpenEnv running"}
 
 
+# ✅ ADDED: health check endpoint
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+# ✅ ADDED: tasks listing endpoint
+@app.get("/tasks")
+def get_tasks():
+    return {
+        "tasks": [
+            {"id": "clause_identification", "difficulty": "easy",
+             "summary": "Identify clause type (termination notice)"},
+            {"id": "risk_classification", "difficulty": "medium",
+             "summary": "Label supplier risk level of indemnity clause"},
+            {"id": "contract_negotiation", "difficulty": "hard",
+             "summary": "Redline to reduce supplier liability exposure"},
+        ]
+    }
+
+
+# ✅ ADDED: grader endpoint (this is what the validator checks)
+@app.post("/grader")
+def grader(action: Action):
+    if action.task_id not in GRADERS:
+        return {"score": 0.0, "feedback": "invalid task_id"}
+    score = GRADERS[action.task_id](action)
+    return {
+        "task_id": action.task_id,
+        "score": round(score, 4),
+        "feedback": f"{action.task_id} graded successfully"
+    }
+
+
 @app.post("/reset")
 def reset():
     global current_obs, done, scores
@@ -46,7 +81,6 @@ def reset():
 def step():
     global env, current_obs, client, scores, done
 
-    # ✅ Guard: must call /reset first
     if current_obs is None:
         current_obs = env.reset()
         done = False
@@ -65,7 +99,7 @@ def step():
 
         current_obs, reward, done, info = env.step(action)
 
-        scores.append(reward.score)  # ✅ reward.score is now a clean float
+        scores.append(reward.score)
 
         return {
             "task_id": task_id,
