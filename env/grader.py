@@ -16,7 +16,7 @@ def _normalized_score(positive: float, negative: float, max_positive: float) -> 
 
 # ================= TASK 1 =================
 
-def grade_clause_identification(action: Action) -> Reward:
+def grade_clause_identification(action: Action) -> float:
     text = action.response.lower()
     pos, neg = 0.0, 0.0
 
@@ -40,7 +40,7 @@ def grade_clause_identification(action: Action) -> Reward:
 
 # ================= TASK 2 =================
 
-def grade_risk_classification(action: Action) -> Reward:
+def grade_risk_classification(action: Action) -> float:
     text = action.response.lower()
     pos, neg = 0.0, 0.0
 
@@ -66,7 +66,7 @@ def grade_risk_classification(action: Action) -> Reward:
 
 # ================= TASK 3 =================
 
-def grade_contract_negotiation(action: Action) -> Reward:
+def grade_contract_negotiation(action: Action) -> float:
     text = action.response.lower()
     pos, neg = 0.0, 0.0
 
@@ -99,11 +99,14 @@ GRADERS = {
 
 def grade(action: Action) -> Reward:
     if action.task_id not in GRADERS:
-        return Reward(
-            task_id=action.task_id,
-            score=0.0,
-            feedback="invalid task",
-            details={}
-        )
+        return Reward(task_id=action.task_id, score=0.0, feedback="invalid task", details={})
+
+    score = GRADERS[action.task_id](action)  # now gets float
+    return Reward(
+        task_id=action.task_id,
+        score=score,
+        feedback=f"{action.task_id} grading",
+        details={}
+    )
 
     return GRADERS[action.task_id](action)
