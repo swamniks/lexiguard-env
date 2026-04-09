@@ -5,12 +5,18 @@ tasks:
   - id: clause_identification
     difficulty: easy
     summary: Identify clause type (termination notice)
+    grader: "env.grader:grade_clause_identification"
+
   - id: risk_classification
     difficulty: medium
     summary: Label supplier risk level of indemnity clause
+    grader: "env.grader:grade_risk_classification"
+
   - id: contract_negotiation
     difficulty: hard
     summary: Redline to reduce supplier liability exposure
+    grader: "env.grader:grade_contract_negotiation"
+
 reward:
   range: [0.0, 1.0]
   shaping: true
