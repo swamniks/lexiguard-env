@@ -48,7 +48,7 @@ def grade_clause_identification(action: Action) -> Reward:
 
     score = _normalized_score(pos, neg, max_positive=1.2)
     return Reward(
-        task_id=CLAUSE_IDENTIFICATION.task_id,
+        task_id="clause_identification",
         score=score,
         feedback="; ".join(feedback_parts),
         details={
@@ -96,7 +96,7 @@ def grade_risk_classification(action: Action) -> Reward:
 
     score = _normalized_score(pos, neg, max_positive=1.05)
     return Reward(
-        task_id=RISK_CLASSIFICATION.task_id,
+        task_id="risk_classification",
         score=score,
         feedback="; ".join(feedback_parts),
         details={
@@ -146,7 +146,7 @@ def grade_contract_negotiation(action: Action) -> Reward:
         feedback_parts.append("No concrete protective edits detected.")
 
     return Reward(
-        task_id=CONTRACT_NEGOTIATION.task_id,
+        task_id="contract_negotiation",
         score=score,
         feedback="; ".join(feedback_parts),
         details={
@@ -162,9 +162,9 @@ def grade_contract_negotiation(action: Action) -> Reward:
 
 
 GRADERS = {
-    CLAUSE_IDENTIFICATION.task_id: grade_clause_identification,
-    RISK_CLASSIFICATION.task_id: grade_risk_classification,
-    CONTRACT_NEGOTIATION.task_id: grade_contract_negotiation,
+    "clause_identification": grade_clause_identification,
+    "risk_classification": grade_risk_classification,
+    "contract_negotiation": grade_contract_negotiation,
 }
 
 
