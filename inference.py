@@ -3,9 +3,6 @@ from __future__ import annotations
 import os
 from typing import List
 
-from env.environment import LexiGuardEnv
-from env.models import Action, Observation
-
 
 # ================= CONFIG =================
 
@@ -19,19 +16,17 @@ BENCHMARK = "lexiguard-openenv"
 
 # ================= FALLBACK =================
 
-def heuristic_policy(obs: Observation) -> str:
-    tid = obs.task_id
+def heuristic_policy(task_id: str) -> str:
+    if task_id == "clause_identification":
+        return "This clause allows termination with notice"
 
-    if tid == "clause_identification":
-        return "This clause allows termination with notice."
+    if task_id == "risk_classification":
+        return "High risk due to unlimited liability"
 
-    if tid == "risk_classification":
-        return "High risk due to unlimited liability."
+    if task_id == "contract_negotiation":
+        return "Liability should be capped and mutual"
 
-    if tid == "contract_negotiation":
-        return "Liability should be capped and mutual."
-
-    return "No response."
+    return "No response"
 
 
 # ================= SAFE STRING =================
@@ -43,7 +38,7 @@ def sanitize(text: str) -> str:
         text.replace("\n", " ")
         .replace("\r", " ")
         .replace(" ", "_")
-        .replace(".", "")   
+        .replace(".", "")
         .replace(",", "")
         .replace("|", "_")
     )[:60]
@@ -51,22 +46,22 @@ def sanitize(text: str) -> str:
 
 # ================= SAFE LLM =================
 
-def _call_llm(client, obs: Observation) -> str:
+def _call_llm(client, task_id: str, prompt: str) -> str:
     if client is None:
-        return heuristic_policy(obs)
+        return heuristic_policy(task_id)
 
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": "You are an expert lawyer."},
-                {"role": "user", "content": f"{obs.prompt}"},
+                {"role": "user", "content": prompt},
             ],
             max_tokens=200,
         )
         return completion.choices[0].message.content or ""
     except Exception:
-        return heuristic_policy(obs)
+        return heuristic_policy(task_id)
 
 
 # ================= MAIN =================
@@ -79,18 +74,30 @@ def run_episode() -> None:
     print(f"[START] task={TASK_NAME} env={BENCHMARK} model={MODEL_NAME}")
 
     try:
-        env = LexiGuardEnv()
-        obs = env.reset()
+        # 🔥 SAFE IMPORTS (CRITICAL FIX)
+        try:
+            from env.environment import LexiGuardEnv
+            from env.models import Action
+        except Exception:
+            print("[STEP] step=0 action=error reward=0.00 done=true error=env_import_failed")
+            print("[END] success=false steps=0 score=0.00 rewards=")
+            return
 
-        # SAFE CLIENT INIT
+        # 🔥 SAFE ENV INIT
+        try:
+            env = LexiGuardEnv()
+            obs = env.reset()
+        except Exception:
+            print("[STEP] step=0 action=error reward=0.00 done=true error=env_init_failed")
+            print("[END] success=false steps=0 score=0.00 rewards=")
+            return
+
+        # 🔥 SAFE CLIENT INIT
         client = None
         if API_KEY:
             try:
                 from openai import OpenAI
-                client = OpenAI(
-                    base_url=API_BASE_URL,
-                    api_key=API_KEY,
-                )
+                client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
             except Exception:
                 client = None
 
@@ -100,10 +107,13 @@ def run_episode() -> None:
             step += 1
 
             try:
-                response = _call_llm(client, obs)
+                task_id = getattr(obs, "task_id", "unknown")
+                prompt = getattr(obs, "prompt", "")
+
+                response = _call_llm(client, task_id, prompt)
                 safe_action = sanitize(response)
 
-                action = Action(task_id=obs.task_id, response=response)
+                action = Action(task_id=task_id, response=response)
 
                 obs, reward, done, info = env.step(action)
 
@@ -114,23 +124,17 @@ def run_episode() -> None:
                     f"reward={reward.score:.2f} done={str(done).lower()} error=null"
                 )
 
-            except Exception as e:
+            except Exception:
                 success = False
-                err = sanitize(str(e))
-
                 print(
                     f"[STEP] step={step} action=error "
-                    f"reward=0.00 done=true error={err}"
+                    f"reward=0.00 done=true error=step_failed"
                 )
                 break
 
-    except Exception as e:
+    except Exception:
         success = False
-        err = sanitize(str(e))
-
-        print(
-            f"[STEP] step=0 action=error reward=0.00 done=true error={err}"
-        )
+        print("[STEP] step=0 action=error reward=0.00 done=true error=critical_failure")
 
     total_score = sum(rewards) / len(rewards) if rewards else 0.0
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
