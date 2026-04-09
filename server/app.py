@@ -44,26 +44,35 @@ def reset():
 
 @app.post("/step")
 def step():
-    global current_obs, done, scores
+    global env, current_obs, client
 
-    if done:
-        return {"error": "Episode finished. Call /reset first."}
+    try:
+        # Extract safely
+        task_id = getattr(current_obs, "task_id", "unknown")
+        prompt = getattr(current_obs, "prompt", "")
 
-    response = _call_llm(client, current_obs)
+        # 🔥 FIX: correct function call
+        response = _call_llm(client, task_id, prompt)
 
-    action = Action(task_id=current_obs.task_id, response=response)
+        action = Action(
+            task_id=task_id,
+            response=response
+        )
 
-    current_obs, reward, done, info = env.step(action)
+        current_obs, reward, done, info = env.step(action)
 
-    scores.append(round(reward.score, 2))
+        return {
+            "task_id": task_id,
+            "response": response,
+            "score": reward.score,
+            "done": done
+        }
 
-    return {
-        "task": info["task_id"],
-        "reward": reward.score,
-        "done": done,
-        "scores_so_far": scores
-    }
-
+    except Exception as e:
+        return {
+            "error": str(e),
+            "done": True
+        }
 
 @app.get("/state")
 def state():
