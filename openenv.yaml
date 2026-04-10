@@ -1,6 +1,61 @@
-spec_version: 1
-name: lexiguard
-type: http
-runtime: docker
-app: server/app.py
-port: 7860
+name: LexiGuard Legal Contract Review Environment
+description: >
+  An OpenEnv-compliant environment for legal contract analysis.
+  An LLM agent receives real-world contract clauses and must identify
+  clause types, assess risk levels, propose redlines, and flag
+  compliance violations under GDPR and EU AI Act.
+version: "1.0.0"
+author: LexiGuard
+observation_space:
+  type: text
+  description: >
+    A legal contract clause or excerpt requiring analysis,
+    classification, risk assessment, negotiation, or compliance review.
+action_space:
+  type: text
+  description: >
+    Free-form legal analysis response identifying clause type,
+    risk level, redlined revision, or compliance verdict.
+endpoints:
+  health: /health
+  reset: /reset
+  step: /step
+  state: /state
+tasks:
+  - id: clause_identification
+    description: >
+      Identify the clause type in a contract excerpt.
+      The clause governs termination with notice period.
+      Correct answer should identify termination clause.
+    steps: 3
+    ideal_action: termination
+  - id: risk_classification
+    description: >
+      Classify the risk level of an indemnity clause for the supplier.
+      Unlimited indemnity with no liability cap is high risk.
+      Correct answer should identify high risk.
+    steps: 3
+    ideal_action: high
+  - id: contract_negotiation
+    description: >
+      Propose a redlined revision to reduce supplier liability exposure.
+      Response should introduce a cap, limit consequential damages,
+      and make obligations mutual where appropriate.
+    steps: 3
+    ideal_action: cap liability and make obligations mutual
+  - id: compliance_check
+    description: >
+      Identify GDPR and EU AI Act compliance violations in a data
+      processing clause. The clause lacks lawful basis, consent
+      mechanism, and data retention limits — making it non-compliant.
+      Correct answer should identify non-compliance.
+    steps: 3
+    ideal_action: non_compliant
+scoring:
+  reward_range: [0.0, 1.0]
+  success_threshold: 0.5
+  score_formula: mean(step_rewards)
+constraints:
+  max_runtime_seconds: 1200
+  max_memory_gb: 8
+  max_vcpu: 2
