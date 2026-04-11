@@ -26,6 +26,3 @@ tasks:
     grader:
       type: llm
       prompt_template: "Score the contract negotiation 0.0 to 1.0..."
-Also fix your [END] line — it's missing the task= field and uses :.2f instead of :.3f for score:
-
-print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
