@@ -1,11 +1,9 @@
 from __future__ import annotations
 from typing import Any, List, Optional
-
 from openenv.core.env_server import Environment
-from models import LexiGuardAction, LexiGuardObservation, LexiGuardState
+from server.models import LexiGuardAction, LexiGuardObservation, LexiGuardState
 from env.tasks import TASKS
 from env.grader import GRADERS
-
 
 class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, LexiGuardState]):
 
@@ -19,7 +17,6 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
 
     def reset(self, seed=None, episode_id=None, **kwargs: Any) -> LexiGuardObservation:
         task_id = kwargs.get("task_id") or kwargs.get("task") or TASKS[0].task_id
-
         found = False
         for i, t in enumerate(TASKS):
             if t.task_id == task_id:
@@ -28,11 +25,9 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
                 break
         if not found:
             self._task_index = 0
-
         self._current_task = TASKS[self._task_index]
         self._done = False
         self._rewards = []
-
         return LexiGuardObservation(
             text=self._current_task.prompt,
             task_id=self._current_task.task_id,
@@ -43,16 +38,13 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
             raise RuntimeError("Call reset() before step()")
         if self._done:
             raise RuntimeError("Episode is finished. Call reset().")
-
         if action.task_id in GRADERS:
             reward = GRADERS[action.task_id](action)
         else:
             reward = 0.0
-
         self._rewards.append(reward)
         self._task_index += 1
         self._done = self._task_index >= len(TASKS)
-
         if not self._done:
             self._current_task = TASKS[self._task_index]
             next_text = self._current_task.prompt
@@ -60,7 +52,6 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
         else:
             next_text = ""
             next_task_id = action.task_id
-
         return LexiGuardObservation(
             text=next_text,
             task_id=next_task_id,
