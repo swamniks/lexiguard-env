@@ -15,6 +15,7 @@ def _normalized_score(positive: float, negative: float, max_positive: float) -> 
 
 
 def grade_clause_identification(action: Action) -> float:
+    """Grader for clause_identification task - returns score 0.0-1.0"""
     text = action.response.lower()
     pos, neg = 0.0, 0.0
     if "termination" in text:
@@ -27,6 +28,7 @@ def grade_clause_identification(action: Action) -> float:
 
 
 def grade_risk_classification(action: Action) -> float:
+    """Grader for risk_classification task - returns score 0.0-1.0"""
     text = action.response.lower()
     pos, neg = 0.0, 0.0
     if "high" in text:
@@ -41,6 +43,7 @@ def grade_risk_classification(action: Action) -> float:
 
 
 def grade_contract_negotiation(action: Action) -> float:
+    """Grader for contract_negotiation task - returns score 0.0-1.0"""
     text = action.response.lower()
     pos, neg = 0.0, 0.0
     if "cap" in text or "limit" in text:
@@ -52,26 +55,10 @@ def grade_contract_negotiation(action: Action) -> float:
     return _normalized_score(pos, neg, 0.9)
 
 
-# ✅ NEW: 4th grader
-def grade_compliance_check(action: Action) -> float:
-    text = action.response.lower()
-    pos, neg = 0.0, 0.0
-    if _contains_any(text, ("non-compliant", "non_compliant", "noncompliant", "not compliant", "violates", "violation")):
-        pos += 0.5
-    if _contains_any(text, ("gdpr", "consent", "lawful basis", "legal basis")):
-        pos += 0.2
-    if _contains_any(text, ("retention", "indefinite", "storage limitation")):
-        pos += 0.15
-    if _contains_any(text, ("third party", "third-party", "transparency", "notice")):
-        pos += 0.15
-    return _normalized_score(pos, neg, 1.0)
-
-
 GRADERS = {
     "clause_identification": grade_clause_identification,
     "risk_classification": grade_risk_classification,
     "contract_negotiation": grade_contract_negotiation,
-    "compliance_check": grade_compliance_check,  # ✅ added
 }
 
 

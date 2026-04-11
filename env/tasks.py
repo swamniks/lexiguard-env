@@ -89,7 +89,7 @@ TASKS: List[Task] = [
     CLAUSE_IDENTIFICATION,
     RISK_CLASSIFICATION,
     CONTRACT_NEGOTIATION,
-    COMPLIANCE_CHECK,  # ✅ added
+    
 ]
 
 TASK_MAP: Dict[str, Task] = {t.task_id: t for t in TASKS}
