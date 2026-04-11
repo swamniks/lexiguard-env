@@ -10,8 +10,9 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-TASK_NAME = "lexiguard"
-BENCHMARK = "lexiguard-openenv"
+# Change this to use specific task ID instead of "lexiguard"
+TASK_NAME = os.getenv("LEXIGUARD_TASK", "clause_identification")
+BENCHMARK = "lexiguard"
 
 
 # ================= FALLBACK =================
@@ -83,9 +84,9 @@ def run_episode() -> None:
             print("[END] success=false steps=0 score=0.00 rewards=")
             return
 
-        # 🔥 SAFE ENV INIT
+        # 🔥 SAFE ENV INIT - Pass the specific task
         try:
-            env = LexiGuardEnv()
+            env = LexiGuardEnv(task=TASK_NAME)
             obs = env.reset()
         except Exception:
             print("[STEP] step=0 action=error reward=0.00 done=true error=env_init_failed")
@@ -139,9 +140,10 @@ def run_episode() -> None:
     total_score = sum(rewards) / len(rewards) if rewards else 0.0
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
 
-    print(
-        print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
-    )
+    # FIXED: Removed the extra print() wrapper
+    print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
+
+
 if __name__ == "__main__":
     try:
         run_episode()
