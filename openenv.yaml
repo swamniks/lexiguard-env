@@ -6,23 +6,30 @@ app: server/app.py
 port: 7860
 
 tasks:
-  - id: easy
+  - id: clause_identification
     difficulty: easy
-    description: "Basic clause identification"
+    description: "Identify the clause type in a legal contract excerpt"
     grader:
       type: llm
-      prompt_template: "Score the legal clause identification 0.0 to 1.0..."
+      prompt_template: "Score the legal clause identification from 0.0 to 1.0 based on whether the response correctly identifies the termination clause."
 
-  - id: medium
+  - id: risk_classification
     difficulty: medium
-    description: "Risk classification task"
+    description: "Classify the risk level of an indemnity clause"
     grader:
       type: llm
-      prompt_template: "Score the risk classification 0.0 to 1.0..."
+      prompt_template: "Score the risk classification from 0.0 to 1.0 based on whether the response correctly identifies high risk for unlimited indemnity."
 
-  - id: hard
+  - id: contract_negotiation
     difficulty: hard
-    description: "Contract negotiation task"
+    description: "Propose redlined revision to reduce supplier liability"
     grader:
       type: llm
-      prompt_template: "Score the contract negotiation 0.0 to 1.0..."
+      prompt_template: "Score the contract negotiation from 0.0 to 1.0 based on whether the response introduces a liability cap and mutual obligations."
+
+  - id: compliance_check
+    difficulty: medium
+    description: "Identify GDPR and EU AI Act compliance violations"
+    grader:
+      type: llm
+      prompt_template: "Score the compliance check from 0.0 to 1.0 based on whether the response correctly identifies GDPR violations including lack of consent and retention policy."
