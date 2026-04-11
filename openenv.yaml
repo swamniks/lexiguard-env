@@ -10,26 +10,19 @@ tasks:
     difficulty: easy
     description: "Identify the clause type in a legal contract excerpt"
     grader:
-      type: llm
-      prompt_template: "Score the legal clause identification from 0.0 to 1.0 based on whether the response correctly identifies the termination clause."
+      type: python
+      path: env.grader:grade_clause_identification
 
   - id: risk_classification
     difficulty: medium
     description: "Classify the risk level of an indemnity clause"
     grader:
-      type: llm
-      prompt_template: "Score the risk classification from 0.0 to 1.0 based on whether the response correctly identifies high risk for unlimited indemnity."
+      type: python
+      path: env.grader:grade_risk_classification
 
   - id: contract_negotiation
     difficulty: hard
     description: "Propose redlined revision to reduce supplier liability"
     grader:
-      type: llm
-      prompt_template: "Score the contract negotiation from 0.0 to 1.0 based on whether the response introduces a liability cap and mutual obligations."
-
-  - id: compliance_check
-    difficulty: medium
-    description: "Identify GDPR and EU AI Act compliance violations"
-    grader:
-      type: llm
-      prompt_template: "Score the compliance check from 0.0 to 1.0 based on whether the response correctly identifies GDPR violations including lack of consent and retention policy."
+      type: python
+      path: env.grader:grade_contract_negotiation

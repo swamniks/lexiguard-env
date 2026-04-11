@@ -142,8 +142,6 @@ def run_episode() -> None:
     print(
         print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
     )
-
-
 if __name__ == "__main__":
     try:
         run_episode()

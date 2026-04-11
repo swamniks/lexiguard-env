@@ -6,6 +6,7 @@ from inference import _call_llm
 from openai import OpenAI
 import os
 import uvicorn
+from typing import Optional
 
 app = FastAPI()
 
@@ -13,7 +14,8 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 
-env = LexiGuardEnv()
+# Don't create global env - will create per reset
+env = None
 current_obs = None
 done = False
 scores = []
@@ -62,6 +64,33 @@ def get_tasks():
     }
 
 
+@app.get("/openenv/tasks")
+def openenv_tasks():
+    """OpenEnv required endpoint to list available tasks with grader paths"""
+    return {
+        "tasks": [
+            {
+                "id": "clause_identification",
+                "difficulty": "easy",
+                "max_steps": 5,
+                "grader": "env.grader:grade_clause_identification"
+            },
+            {
+                "id": "risk_classification",
+                "difficulty": "medium",
+                "max_steps": 5,
+                "grader": "env.grader:grade_risk_classification"
+            },
+            {
+                "id": "contract_negotiation",
+                "difficulty": "hard",
+                "max_steps": 8,
+                "grader": "env.grader:grade_contract_negotiation"
+            }
+        ]
+    }
+
+
 @app.post("/grader")
 def grader(action: Action):
     if action.task_id not in GRADERS:
@@ -75,8 +104,10 @@ def grader(action: Action):
 
 
 @app.post("/reset")
-def reset():
-    global current_obs, done, scores
+def reset(task: Optional[str] = None):
+    global env, current_obs, done, scores
+    # Create new env with specific task if provided
+    env = LexiGuardEnv(task=task) if task else LexiGuardEnv()
     current_obs = env.reset()
     done = False
     scores = []
@@ -89,6 +120,9 @@ def reset():
 @app.post("/step")
 def step():
     global env, current_obs, client, scores, done
+
+    if env is None:
+        return {"error": "Environment not initialized. Call /reset first.", "done": True}
 
     if current_obs is None:
         current_obs = env.reset()
