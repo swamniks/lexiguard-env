@@ -1,19 +1,16 @@
+from __future__ import annotations
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from __future__ import annotations
+
+_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
 from typing import Any, List, Optional
-
 from openenv.core.env_server import Environment
-
-try:
-    from ..models import LexiGuardAction, LexiGuardObservation, LexiGuardState
-    from ..env.tasks import TASKS, TASK_MAP
-    from ..env.grader import GRADERS
-except ImportError:
-    from models import LexiGuardAction, LexiGuardObservation, LexiGuardState
-    from env.tasks import TASKS, TASK_MAP
-    from env.grader import GRADERS
+from models import LexiGuardAction, LexiGuardObservation, LexiGuardState
+from env.tasks import TASKS, TASK_MAP
+from env.grader import GRADERS
 
 
 class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, LexiGuardState]):
@@ -26,10 +23,9 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
         self._rewards: List[float] = []
         self._current_task = None
 
-    def reset(self, seed: Optional[int] = None, episode_id: Optional[str] = None, **kwargs: Any) -> LexiGuardObservation:
+    def reset(self, seed=None, episode_id=None, **kwargs: Any) -> LexiGuardObservation:
         task_id = kwargs.get("task_id") or kwargs.get("task") or TASKS[0].task_id
 
-        # Find task index
         found = False
         for i, t in enumerate(TASKS):
             if t.task_id == task_id:
@@ -54,7 +50,6 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
         if self._done:
             raise RuntimeError("Episode is finished. Call reset().")
 
-        # Grade the action
         if action.task_id in GRADERS:
             reward = GRADERS[action.task_id](action)
         else:
@@ -64,7 +59,6 @@ class LexiGuardEnvironment(Environment[LexiGuardAction, LexiGuardObservation, Le
         self._task_index += 1
         self._done = self._task_index >= len(TASKS)
 
-        # Get next observation
         if not self._done:
             self._current_task = TASKS[self._task_index]
             next_text = self._current_task.prompt

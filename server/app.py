@@ -2,23 +2,14 @@ from __future__ import annotations
 import sys
 import os
 
-# Ensure the root env directory is in path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add /app/env to path so 'models' can be found
+_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-try:
-    from openenv.core.env_server.http_server import create_app
-except ImportError:
-    raise ImportError("openenv-core is required. Install with: pip install openenv-core")
-
-try:
-    from models import LexiGuardAction, LexiGuardObservation
-    from server.lexiguard_environment import LexiGuardEnvironment
-except ImportError:
-    try:
-        from ..models import LexiGuardAction, LexiGuardObservation
-        from .lexiguard_environment import LexiGuardEnvironment
-    except ImportError:
-        raise ImportError("Could not import LexiGuard models or environment")
+from openenv.core.env_server.http_server import create_app
+from models import LexiGuardAction, LexiGuardObservation
+from server.lexiguard_environment import LexiGuardEnvironment
 
 app = create_app(
     LexiGuardEnvironment,
