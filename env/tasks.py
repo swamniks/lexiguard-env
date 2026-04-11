@@ -1,95 +1,134 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Dict, List
+tasks 
 
 
-@dataclass(frozen=True)
-class Task:
-    task_id: str
-    name: str
-    difficulty: str
-    prompt: str
-    rubric: Dict[str, str]
-    description: str
+from fastapi import FastAPI
+from env.environment import LexiGuardEnv
+from env.models import Action
+from env.grader import GRADERS
+from inference import _call_llm
+from openai import OpenAI
+import os
+import uvicorn
+
+app = FastAPI()
+
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+
+env = LexiGuardEnv()
+current_obs = None
+done = False
+scores = []
+
+client = None
+if API_KEY:
+    try:
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    except Exception:
+        client = None
 
 
-CLAUSE_IDENTIFICATION = Task(
-    task_id="clause_identification",
-    name="Clause Identification",
-    difficulty="easy",
-    prompt=(
-        "Identify the clause type in the following excerpt:\n"
-        "\"This Agreement may be terminated by either party upon thirty (30) days' "
-        "written notice to the other party without cause.\""
-    ),
-    rubric={
-        "termination": "Correct label expected.",
-        "notice": "Acceptable as near-synonym for termination notice clause.",
-    },
-    description="Detects whether the model can name the legal clause that governs termination.",
-)
-
-RISK_CLASSIFICATION = Task(
-    task_id="risk_classification",
-    name="Risk Classification",
-    difficulty="medium",
-    prompt=(
-        "Classify the risk level (low/medium/high) of this indemnity clause for the supplier:\n"
-        "\"Supplier shall indemnify and hold harmless Customer from any and all claims, "
-        "damages, losses, liabilities, including attorneys' fees, arising out of or related "
-        "to the products or services provided hereunder, without limitation.\""
-    ),
-    rubric={"high": "Unlimited indemnity with fee coverage is high risk for supplier."},
-    description="Assesses whether the model can recognize risk severity.",
-)
-
-CONTRACT_NEGOTIATION = Task(
-    task_id="contract_negotiation",
-    name="Contract Negotiation",
-    difficulty="hard",
-    prompt=(
-        "Propose a redlined revision to reduce supplier risk for this limitation of liability clause.\n"
-        "\"Supplier's total liability under this Agreement shall not exceed the amounts paid by "
-        "Customer, except that this limitation shall not apply to indemnity obligations, "
-        "confidentiality breaches, or data security incidents.\""
-    ),
-    rubric={
-        "cap": "Introduce a monetary cap (e.g., 12 months fees).",
-        "carveouts": "Keep limited carveouts; avoid expanding liability.",
-        "mutual": "Prefer making obligations mutual where appropriate.",
-        "direct_damages": "Restrict to direct damages; exclude consequential/punitive.",
-    },
-    description="Tests ability to negotiate and draft safer language with concrete changes.",
-)
-
-# ✅ NEW: 4th task — compliance check
-COMPLIANCE_CHECK = Task(
-    task_id="compliance_check",
-    name="Compliance Check",
-    difficulty="medium",
-    prompt=(
-        "Review the following data processing clause for GDPR and EU AI Act compliance issues:\n"
-        "\"The Company may collect, store, and process all user data submitted through this platform "
-        "indefinitely for any business purpose deemed appropriate by the Company, including sharing "
-        "with third-party partners without prior notice to the user.\"\n"
-        "Identify whether this clause is compliant or non-compliant and explain the violations."
-    ),
-    rubric={
-        "non_compliant": "Clause lacks lawful basis, consent, purpose limitation, and retention policy.",
-        "gdpr": "Should reference GDPR violations — no consent, no purpose limitation.",
-        "retention": "Indefinite storage without defined retention period violates data minimisation.",
-        "third_party": "Sharing with third parties without notice violates transparency obligations.",
-    },
-    description="Tests ability to identify GDPR and EU AI Act violations in a data processing clause.",
-)
+@app.get("/")
+def home():
+    return {"message": "LexiGuard OpenEnv running"}
 
 
-TASKS: List[Task] = [
-    CLAUSE_IDENTIFICATION,
-    RISK_CLASSIFICATION,
-    CONTRACT_NEGOTIATION,
-    COMPLIANCE_CHECK,  # ✅ added
-]
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
 
-TASK_MAP: Dict[str, Task] = {t.task_id: t for t in TASKS}
+
+@app.get("/tasks")
+def get_tasks():
+    return {
+        "tasks": [
+            {"id": "clause_identification", "difficulty": "easy",
+             "summary": "Identify clause type (termination notice)",
+             "has_grader": True},
+            {"id": "risk_classification", "difficulty": "medium",
+             "summary": "Label supplier risk level of indemnity clause",
+             "has_grader": True},
+            {"id": "contract_negotiation", "difficulty": "hard",
+             "summary": "Redline to reduce supplier liability exposure",
+             "has_grader": True},
+        ]
+    }
+
+
+@app.post("/grader")
+def grader(action: Action):
+    if action.task_id not in GRADERS:
+        return {"score": 0.0, "feedback": "invalid task_id"}
+    score = GRADERS[action.task_id](action)
+    return {
+        "task_id": action.task_id,
+        "score": round(score, 4),
+        "feedback": f"{action.task_id} graded successfully"
+    }
+
+
+@app.post("/reset")
+def reset():
+    global current_obs, done, scores
+    current_obs = env.reset()
+    done = False
+    scores = []
+    return {
+        "message": "Environment reset",
+        "task": current_obs.task_id
+    }
+
+
+@app.post("/step")
+def step():
+    global env, current_obs, client, scores, done
+
+    if current_obs is None:
+        current_obs = env.reset()
+        done = False
+        scores = []
+
+    if done:
+        return {"error": "Episode already done. Call /reset to start again.", "done": True}
+
+    try:
+        task_id = getattr(current_obs, "task_id", "unknown")
+        prompt = getattr(current_obs, "prompt", "")
+
+        response = _call_llm(client, task_id, prompt)
+
+        action = Action(task_id=task_id, response=response)
+
+        current_obs, reward, done, info = env.step(action)
+
+        scores.append(reward.score)
+
+        return {
+            "task_id": task_id,
+            "response": response,
+            "score": reward.score,
+            "done": done
+        }
+
+    except Exception as e:
+        return {"error": str(e), "done": True}
+
+
+@app.get("/state")
+def state():
+    global scores, done
+    avg = sum(scores) / len(scores) if scores else 0.0
+    return {
+        "done": done,
+        "scores": scores,
+        "average_score": round(avg, 2)
+    }
+
+
+def main():
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()

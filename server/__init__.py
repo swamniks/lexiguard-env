@@ -1,5 +1,5 @@
 try:
-    from models import LexiGuardAction, LexiGuardObservation, LexiGuardState
+    from env.models import LexiGuardAction, LexiGuardObservation, LexiGuardState
     from server.lexiguard_environment import LexiGuardEnvironment
 except ImportError:
     pass
