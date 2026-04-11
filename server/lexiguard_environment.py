@@ -1,15 +1,9 @@
 from __future__ import annotations
-import sys
-import os
-
-_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-
 from typing import Any, List, Optional
+
 from openenv.core.env_server import Environment
 from models import LexiGuardAction, LexiGuardObservation, LexiGuardState
-from env.tasks import TASKS, TASK_MAP
+from env.tasks import TASKS
 from env.grader import GRADERS
 
 
