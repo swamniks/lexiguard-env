@@ -1,6 +1,31 @@
-spec_version: 1
+spec_version: "1.0"
 name: lexiguard
 type: http
 runtime: docker
 app: server/app.py
 port: 7860
+
+tasks:
+  - id: easy
+    difficulty: easy
+    description: "Basic clause identification"
+    grader:
+      type: llm
+      prompt_template: "Score the legal clause identification 0.0 to 1.0..."
+
+  - id: medium
+    difficulty: medium
+    description: "Risk classification task"
+    grader:
+      type: llm
+      prompt_template: "Score the risk classification 0.0 to 1.0..."
+
+  - id: hard
+    difficulty: hard
+    description: "Contract negotiation task"
+    grader:
+      type: llm
+      prompt_template: "Score the contract negotiation 0.0 to 1.0..."
+Also fix your [END] line — it's missing the task= field and uses :.2f instead of :.3f for score:
+
+print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
