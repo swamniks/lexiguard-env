@@ -1,80 +1,123 @@
 from __future__ import annotations
 
-import os
-import sys
-from typing import Optional
-
-try:
-    from env.environment import LexiGuardEnv
-    from env.models import Action, Observation
-except Exception as exc:
-    print(f"[WARN] Failed to import env modules: {exc}", file=sys.stderr)
-    LexiGuardEnv = None  # type: ignore
-    Action = None  # type: ignore
-    Observation = None  # type: ignore
-
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None
+from typing import Tuple
+from env.models import Action, Reward
 
 
-def heuristic(obs: Observation) -> str:
-    tid = obs.task_id
-    if tid == "clause_identification":
-        return "This is a termination clause allowing either party to terminate on 30 days' notice without cause."
-    if tid == "risk_classification":
-        return "High risk for supplier due to uncapped indemnity and attorneys' fees."
-    if tid == "contract_negotiation":
-        return (
-            "Cap liability at 12 months of fees; exclude consequential/indirect damages; make obligations mutual."
+def _contains_any(text: str, keywords: Tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(k in lowered for k in keywords)
+
+
+def _normalized_score(pos: float, neg: float, max_pos: float) -> float:
+    raw = (pos - neg) / max_pos if max_pos > 0 else 0.0
+    return max(0.0, min(1.0, raw))
+
+
+# ---------- TASK 1 ----------
+def grade_clause_identification(action: Action) -> Reward:
+    text = action.response.lower()
+    pos, neg = 0.0, 0.0
+
+    if "termination" in text:
+        pos += 1.0
+    elif "notice" in text:
+        pos += 0.6
+
+    if "without cause" in text:
+        pos += 0.2
+
+    score = _normalized_score(pos, neg, 1.2)
+
+    return Reward(
+        task_id="clause_identification",
+        score=score,
+        feedback="clause grading",
+        details={}
+    )
+
+
+# ---------- TASK 2 ----------
+def grade_risk_classification(action: Action) -> Reward:
+    text = action.response.lower()
+    pos, neg = 0.0, 0.0
+
+    if "high" in text:
+        pos += 0.7
+    elif "medium" in text:
+        pos += 0.4
+        neg += 0.2
+    elif "low" in text:
+        pos += 0.15
+        neg += 0.35
+
+    if _contains_any(text, ("unlimited", "no cap", "without limitation")):
+        pos += 0.15
+
+    if "attorneys" in text:
+        pos += 0.05
+
+    score = _normalized_score(pos, neg, 1.05)
+
+    return Reward(
+        task_id="risk_classification",
+        score=score,
+        feedback="risk grading",
+        details={}
+    )
+
+
+# ---------- TASK 3 ----------
+def grade_contract_negotiation(action: Action) -> Reward:
+    text = action.response.lower()
+    pos, neg = 0.0, 0.0
+
+    if _contains_any(text, ("cap", "limit")):
+        pos += 0.4
+
+    if _contains_any(text, ("consequential", "indirect", "punitive")):
+        pos += 0.2
+
+    if "mutual" in text:
+        pos += 0.1
+
+    if _contains_any(text, ("direct damages", "direct losses")):
+        pos += 0.1
+
+    if _contains_any(text, ("unlimited", "all damages")):
+        neg += 0.3
+
+    score = _normalized_score(pos, neg, 0.9)
+
+    return Reward(
+        task_id="contract_negotiation",
+        score=score,
+        feedback="negotiation grading",
+        details={}
+    )
+
+
+# 🔥 CRITICAL (DO NOT CHANGE)
+GRADERS = {
+    "clause_identification": grade_clause_identification,
+    "risk_classification": grade_risk_classification,
+    "contract_negotiation": grade_contract_negotiation,
+}
+
+
+def grade(action: Action) -> Reward:
+    if action.task_id not in GRADERS:
+        return Reward(
+            task_id=action.task_id,
+            score=0.0,
+            feedback="invalid",
+            details={}
         )
-    return "No response."
 
-
-def run_episode(client: Optional[object] = None) -> None:
-    if LexiGuardEnv is None or Action is None or Observation is None:
-        print("[START] environment unavailable; exiting.")
-        print("[END]")
-        return
-
-    env = LexiGuardEnv()
-    obs = env.reset()
-    print("[START]")
-
-    while True:
-        if client is not None and hasattr(client, "chat"):
-            try:
-                completion = client.chat.completions.create(
-                    model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
-                    messages=[
-                        {"role": "system", "content": "You are a contract lawyer."},
-                        {"role": "user", "content": obs.prompt},
-                    ],
-                    max_tokens=256,
-                )
-                response = completion.choices[0].message.content.strip()
-            except Exception:
-                response = heuristic(obs)
-        else:
-            response = heuristic(obs)
-
-        action = Action(task_id=obs.task_id, response=response)
-        next_obs, reward, done, info = env.step(action)
-        print(f"[STEP] {info['task_id']} score={reward.score:.2f} feedback={reward.feedback}")
-        if done:
-            break
-        obs = next_obs  # type: ignore
-
-    print("[END]")
-
+    return GRADERS[action.task_id](action)
 
 if __name__ == "__main__":
-    client = None
-    if OpenAI is not None and os.getenv("OPENAI_API_KEY"):
-        try:
-            client = OpenAI(base_url=os.getenv("API_BASE_URL", "https://api.openai.com/v1"))
-        except Exception:
-            client = None
-    run_episode(client)
-
+    try:
+        run_episode()
+    except Exception:
+        print("[END] success=false steps=0 score=0.00 rewards=")
