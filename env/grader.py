@@ -1,7 +1,5 @@
 from __future__ import annotations
-
-from typing import Tuple
-from env.models import Action, Reward
+from typing import Tuple, Any
 
 
 def _contains_any(text: str, keywords: Tuple[str, ...]) -> bool:
@@ -14,8 +12,14 @@ def _normalized_score(positive: float, negative: float, max_positive: float) -> 
     return max(0.0, min(1.0, raw))
 
 
-def grade_clause_identification(action: Action) -> float:
-    text = action.response.lower()
+def _get_response(action: Any) -> str:
+    if hasattr(action, 'response'):
+        return str(action.response).lower()
+    return ""
+
+
+def grade_clause_identification(action: Any) -> float:
+    text = _get_response(action)
     pos, neg = 0.0, 0.0
     if "termination" in text:
         pos += 1.0
@@ -26,8 +30,8 @@ def grade_clause_identification(action: Action) -> float:
     return _normalized_score(pos, neg, 1.2)
 
 
-def grade_risk_classification(action: Action) -> float:
-    text = action.response.lower()
+def grade_risk_classification(action: Any) -> float:
+    text = _get_response(action)
     pos, neg = 0.0, 0.0
     if "high" in text:
         pos += 0.7
@@ -40,8 +44,8 @@ def grade_risk_classification(action: Action) -> float:
     return _normalized_score(pos, neg, 1.05)
 
 
-def grade_contract_negotiation(action: Action) -> float:
-    text = action.response.lower()
+def grade_contract_negotiation(action: Any) -> float:
+    text = _get_response(action)
     pos, neg = 0.0, 0.0
     if "cap" in text or "limit" in text:
         pos += 0.4
@@ -52,9 +56,8 @@ def grade_contract_negotiation(action: Action) -> float:
     return _normalized_score(pos, neg, 0.9)
 
 
-# ✅ NEW: 4th grader
-def grade_compliance_check(action: Action) -> float:
-    text = action.response.lower()
+def grade_compliance_check(action: Any) -> float:
+    text = _get_response(action)
     pos, neg = 0.0, 0.0
     if _contains_any(text, ("non-compliant", "non_compliant", "noncompliant", "not compliant", "violates", "violation")):
         pos += 0.5
@@ -71,17 +74,5 @@ GRADERS = {
     "clause_identification": grade_clause_identification,
     "risk_classification": grade_risk_classification,
     "contract_negotiation": grade_contract_negotiation,
-    "compliance_check": grade_compliance_check,  # ✅ added
+    "compliance_check": grade_compliance_check,
 }
-
-
-def grade(action: Action) -> Reward:
-    if action.task_id not in GRADERS:
-        return Reward(task_id=action.task_id, score=0.0, feedback="invalid task", details={})
-    score = GRADERS[action.task_id](action)
-    return Reward(
-        task_id=action.task_id,
-        score=score,
-        feedback=f"{action.task_id} grading",
-        details={}
-    )
