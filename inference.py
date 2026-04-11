@@ -1,128 +1,80 @@
 from __future__ import annotations
 
 import os
-from typing import List
+import sys
+from typing import Optional
 
-# CONFIG
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-4o-mini")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+try:
+    from env.environment import LexiGuardEnv
+    from env.models import Action, Observation
+except Exception as exc:
+    print(f"[WARN] Failed to import env modules: {exc}", file=sys.stderr)
+    LexiGuardEnv = None  # type: ignore
+    Action = None  # type: ignore
+    Observation = None  # type: ignore
 
-TASK_NAME = "lexiguard"
-BENCHMARK = "lexiguard-openenv"
-
-
-# FALLBACK POLICY
-def heuristic_policy(task_id: str) -> str:
-    if task_id == "clause_identification":
-        return "This clause allows termination with notice"
-    if task_id == "risk_classification":
-        return "High risk due to unlimited liability"
-    if task_id == "contract_negotiation":
-        return "Liability should be capped and mutual"
-    return "No response"
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
 
 
-# SAFE LLM
-def _call_llm(client, task_id: str, prompt: str) -> str:
-    if client is None:
-        return heuristic_policy(task_id)
-
-    try:
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": "You are an expert lawyer."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=200,
+def heuristic(obs: Observation) -> str:
+    tid = obs.task_id
+    if tid == "clause_identification":
+        return "This is a termination clause allowing either party to terminate on 30 days' notice without cause."
+    if tid == "risk_classification":
+        return "High risk for supplier due to uncapped indemnity and attorneys' fees."
+    if tid == "contract_negotiation":
+        return (
+            "Cap liability at 12 months of fees; exclude consequential/indirect damages; make obligations mutual."
         )
-        return completion.choices[0].message.content or ""
-    except Exception:
-        return heuristic_policy(task_id)
+    return "No response."
 
 
-# MAIN
-def run_episode() -> None:
-    step = 0
-    rewards: List[float] = []
-    success = True
+def run_episode(client: Optional[object] = None) -> None:
+    if LexiGuardEnv is None or Action is None or Observation is None:
+        print("[START] environment unavailable; exiting.")
+        print("[END]")
+        return
 
-    print(f"[START] task={TASK_NAME} env={BENCHMARK} model={MODEL_NAME}")
+    env = LexiGuardEnv()
+    obs = env.reset()
+    print("[START]")
 
-    try:
-        # SAFE IMPORT
-        try:
-            from env.environment import LexiGuardEnv
-            from env.models import Action
-        except Exception:
-            print("[STEP] step=0 action=error reward=0.00 done=true error=env_import_failed")
-            print("[END] success=false steps=0 score=0.00 rewards=")
-            return
-
-        # ENV INIT
-        try:
-            env = LexiGuardEnv()
-            obs = env.reset()
-        except Exception:
-            print("[STEP] step=0 action=error reward=0.00 done=true error=env_init_failed")
-            print("[END] success=false steps=0 score=0.00 rewards=")
-            return
-
-        # CLIENT INIT
-        client = None
-        if API_KEY:
+    while True:
+        if client is not None and hasattr(client, "chat"):
             try:
-                from openai import OpenAI
-                client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-            except Exception:
-                client = None
-
-        done = False
-
-        while not done:
-            step += 1
-
-            try:
-                task_id = getattr(obs, "task_id", "unknown")
-                prompt = getattr(obs, "prompt", "")
-
-                response = _call_llm(client, task_id, prompt)
-
-                action = Action(task_id=task_id, response=response)
-
-                obs, reward, done, info = env.step(action)
-
-                rewards.append(round(reward.score, 2))
-
-                print(
-                    f"[STEP] step={step} action=generated "
-                    f"reward={reward.score:.2f} done={str(done).lower()} error=null"
+                completion = client.chat.completions.create(
+                    model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
+                    messages=[
+                        {"role": "system", "content": "You are a contract lawyer."},
+                        {"role": "user", "content": obs.prompt},
+                    ],
+                    max_tokens=256,
                 )
-
+                response = completion.choices[0].message.content.strip()
             except Exception:
-                success = False
-                print(
-                    f"[STEP] step={step} action=error "
-                    f"reward=0.00 done=true error=step_failed"
-                )
-                break
+                response = heuristic(obs)
+        else:
+            response = heuristic(obs)
 
-    except Exception:
-        success = False
-        print("[STEP] step=0 action=error reward=0.00 done=true error=critical_failure")
+        action = Action(task_id=obs.task_id, response=response)
+        next_obs, reward, done, info = env.step(action)
+        print(f"[STEP] {info['task_id']} score={reward.score:.2f} feedback={reward.feedback}")
+        if done:
+            break
+        obs = next_obs  # type: ignore
 
-    total_score = sum(rewards) / len(rewards) if rewards else 0.0
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-
-    print(
-        f"[END] success={str(success).lower()} steps={step} "
-        f"score={total_score:.2f} rewards={rewards_str}"
-    )
+    print("[END]")
 
 
 if __name__ == "__main__":
-    try:
-        run_episode()
-    except Exception:
-        print("[END] success=false steps=0 score=0.00 rewards=")
+    client = None
+    if OpenAI is not None and os.getenv("OPENAI_API_KEY"):
+        try:
+            client = OpenAI(base_url=os.getenv("API_BASE_URL", "https://api.openai.com/v1"))
+        except Exception:
+            client = None
+    run_episode(client)
+

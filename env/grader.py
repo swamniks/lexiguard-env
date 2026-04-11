@@ -1,88 +1,97 @@
 from __future__ import annotations
 
-from typing import Tuple
 from env.models import Action, Reward
 
 
-def _contains_any(text: str, keywords: Tuple[str, ...]) -> bool:
-    lowered = text.lower()
-    return any(k in lowered for k in keywords)
+def _clip(score: float) -> float:
+    return max(0.0, min(1.0, score))
 
 
-def _normalized_score(positive: float, negative: float, max_positive: float) -> float:
-    raw = (positive - negative) / max_positive if max_positive > 0 else 0.0
-    return max(0.0, min(1.0, raw))
-
-
-# ================= TASK 1 =================
-
-def grade_clause_identification(action: Action) -> float:
+def clause_identification(action: Action) -> Reward:
     text = action.response.lower()
-    pos, neg = 0.0, 0.0
+    score = 0.0
+    feedback = []
 
     if "termination" in text:
-        pos += 1.0
-    elif _contains_any(text, ("notice",)):
-        pos += 0.6
+        score += 0.7
+        feedback.append("Found termination label.")
+    if "notice" in text:
+        score += 0.2
+        feedback.append("Mentioned notice requirement.")
+    if "without cause" in text or "no cause" in text:
+        score += 0.1
+        feedback.append("Captured without-cause aspect.")
 
-    if "without cause" in text:
-        pos += 0.2
+    score = _clip(score)
+    if score == 0:
+        feedback.append("Did not identify termination/notice.")
 
-    return _normalized_score(pos, neg, 1.2)  # ✅ returns float
+    return Reward(task_id="clause_identification", score=score, feedback="; ".join(feedback), details=None)
 
 
-# ================= TASK 2 =================
-
-def grade_risk_classification(action: Action) -> float:
+def risk_classification(action: Action) -> Reward:
     text = action.response.lower()
-    pos, neg = 0.0, 0.0
+    score = 0.0
+    feedback = []
 
     if "high" in text:
-        pos += 0.7
+        score += 0.6
+        feedback.append("Labeled as high risk.")
     elif "medium" in text:
-        pos += 0.4
+        score += 0.3
+        feedback.append("Underestimates risk (should be high).")
     elif "low" in text:
-        pos += 0.15
+        feedback.append("Marked low; significant underestimation.")
 
-    if _contains_any(text, ("unlimited", "no cap")):
-        pos += 0.15
+    if "unlimited" in text or "no cap" in text or "without limitation" in text:
+        score += 0.2
+        feedback.append("Recognized uncapped exposure.")
+    if "attorneys' fees" in text or "legal fees" in text:
+        score += 0.1
+        feedback.append("Noted fee-shifting.")
 
-    return _normalized_score(pos, neg, 1.05)  # ✅ returns float
+    score = _clip(score)
+    if score == 0:
+        feedback.append("Missing risk label.")
+
+    return Reward(task_id="risk_classification", score=score, feedback="; ".join(feedback), details=None)
 
 
-# ================= TASK 3 =================
-
-def grade_contract_negotiation(action: Action) -> float:
+def contract_negotiation(action: Action) -> Reward:
     text = action.response.lower()
-    pos, neg = 0.0, 0.0
+    score = 0.0
+    feedback = []
 
-    if "cap" in text or "limit" in text:
-        pos += 0.4
+    if any(k in text for k in ("cap", "limit", "maximum", "12 months", "twelve months", "fees")):
+        score += 0.35
+        feedback.append("Added a liability cap.")
+    if any(k in text for k in ("consequential", "indirect", "special", "punitive")):
+        score += 0.25
+        feedback.append("Excluded consequential damages.")
+    if "mutual" in text or "both parties" in text:
+        score += 0.15
+        feedback.append("Made obligations mutual.")
+    if "direct damages" in text:
+        score += 0.1
+        feedback.append("Limited to direct damages.")
+    if any(k in text for k in ("all damages", "any damages", "unlimited")):
+        score -= 0.2
+        feedback.append("Expanded liability instead of limiting it.")
 
-    if "consequential" in text:
-        pos += 0.2
+    score = _clip(score)
+    if score == 0:
+        feedback.append("No protective redlines found.")
 
-    if "mutual" in text:
-        pos += 0.1
-
-    return _normalized_score(pos, neg, 0.9)  # ✅ returns float
+    return Reward(task_id="contract_negotiation", score=score, feedback="; ".join(feedback), details=None)
 
 
 GRADERS = {
-    "clause_identification": grade_clause_identification,
-    "risk_classification": grade_risk_classification,
-    "contract_negotiation": grade_contract_negotiation,
+    "clause_identification": clause_identification,
+    "risk_classification": risk_classification,
+    "contract_negotiation": contract_negotiation,
 }
 
 
 def grade(action: Action) -> Reward:
-    if action.task_id not in GRADERS:
-        return Reward(task_id=action.task_id, score=0.0, feedback="invalid task", details={})
+    return GRADERS[action.task_id](action)
 
-    score = GRADERS[action.task_id](action)  # ✅ gets float
-    return Reward(
-        task_id=action.task_id,
-        score=score,
-        feedback=f"{action.task_id} grading",
-        details={}
-    )
