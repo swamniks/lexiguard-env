@@ -2,24 +2,21 @@ spec_version: "1.0"
 name: lexiguard
 type: http
 runtime: docker
-app: server/app.py
+app: server.app:app
 port: 7860
 
 tasks:
   - id: clause_identification
     difficulty: easy
     description: "Identify the clause type in a legal contract excerpt"
-    grader: env.grader:grade_clause_identification
-    max_steps: 5
+    grader: env.grader:ClauseIdentificationGrader
 
   - id: risk_classification
     difficulty: medium
     description: "Classify the risk level of an indemnity clause"
-    grader: env.grader:grade_risk_classification
-    max_steps: 5
+    grader: env.grader:RiskClassificationGrader
 
   - id: contract_negotiation
     difficulty: hard
     description: "Propose redlined revision to reduce supplier liability"
-    grader: env.grader:grade_contract_negotiation
-    max_steps: 8
+    grader: env.grader:ContractNegotiationGrader

@@ -81,7 +81,7 @@ def run_episode() -> None:
             from env.models import Action
         except Exception:
             print("[STEP] step=0 action=error reward=0.00 done=true error=env_import_failed")
-            print("[END] success=false steps=0 score=0.00 rewards=")
+            print("[END] success=false steps=0 score=0.01 rewards=")
             return
 
         # 🔥 SAFE ENV INIT - Pass the specific task
@@ -90,7 +90,7 @@ def run_episode() -> None:
             obs = env.reset()
         except Exception:
             print("[STEP] step=0 action=error reward=0.00 done=true error=env_init_failed")
-            print("[END] success=false steps=0 score=0.00 rewards=")
+            print("[END] success=false steps=0 score=0.01 rewards=")
             return
 
         # 🔥 SAFE CLIENT INIT
@@ -118,34 +118,42 @@ def run_episode() -> None:
 
                 obs, reward, done, info = env.step(action)
 
-                rewards.append(round(reward.score, 2))
+                # Clamp reward between 0.01 and 0.99
+                clamped_reward = max(0.01, min(0.99, reward.score))
+                rewards.append(round(clamped_reward, 2))
 
                 print(
                     f"[STEP] step={step} action={safe_action} "
-                    f"reward={reward.score:.2f} done={str(done).lower()} error=null"
+                    f"reward={clamped_reward:.2f} done={str(done).lower()} error=null"
                 )
 
             except Exception:
                 success = False
                 print(
                     f"[STEP] step={step} action=error "
-                    f"reward=0.00 done=true error=step_failed"
+                    f"reward=0.01 done=true error=step_failed"
                 )
                 break
 
     except Exception:
         success = False
-        print("[STEP] step=0 action=error reward=0.00 done=true error=critical_failure")
+        print("[STEP] step=0 action=error reward=0.01 done=true error=critical_failure")
 
-    total_score = sum(rewards) / len(rewards) if rewards else 0.0
+    # Calculate final score - clamp between 0.01 and 0.99
+    if rewards:
+        raw_score = sum(rewards) / len(rewards)
+        final_score = max(0.01, min(0.99, raw_score))
+    else:
+        final_score = 0.01
+    
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
 
-    # FIXED: Removed the extra print() wrapper
-    print(f"[END] success={str(success).lower()} steps={step} score={total_score:.3f} rewards={rewards_str}", flush=True)
+    # FIXED: Clamp score and ensure it's never 0.0 or 1.0
+    print(f"[END] success={str(success).lower()} steps={step} score={final_score:.3f} rewards={rewards_str}", flush=True)
 
 
 if __name__ == "__main__":
     try:
         run_episode()
     except Exception:
-        print("[END] success=false steps=0 score=0.00 rewards=")
+        print("[END] success=false steps=0 score=0.01 rewards=")
