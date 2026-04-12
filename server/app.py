@@ -1,12 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from env.environment import LexiGuardEnv
-from env.models import Action
+from env.models import Action, Observation
 from env.grader import GRADERS
 from inference import _call_llm
 from openai import OpenAI
 import os
 import uvicorn
-from typing import Optional
+from typing import Optional, Dict, Any
 
 app = FastAPI()
 
@@ -111,58 +111,97 @@ def reset(task: Optional[str] = None):
     current_obs = env.reset()
     done = False
     scores = []
+    
+    # Return in standard OpenEnv format
     return {
-        "message": "Environment reset",
-        "task": current_obs.task_id
+        "observation": {
+            "task_id": current_obs.task_id,
+            "prompt": current_obs.prompt,
+            "metadata": current_obs.metadata if hasattr(current_obs, 'metadata') else {}
+        }
     }
 
 
 @app.post("/step")
-def step():
+def step(action: Optional[Dict[str, Any]] = None):
     global env, current_obs, client, scores, done
 
     if env is None:
-        return {"error": "Environment not initialized. Call /reset first.", "done": True}
-
-    if current_obs is None:
-        current_obs = env.reset()
-        done = False
-        scores = []
-
+        raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
+    
     if done:
-        return {"error": "Episode already done. Call /reset to start again.", "done": True}
+        raise HTTPException(status_code=400, detail="Episode already done. Call /reset to start again.")
 
     try:
-        task_id = getattr(current_obs, "task_id", "unknown")
-        prompt = getattr(current_obs, "prompt", "")
+        # If action is provided directly, use it; otherwise generate via LLM
+        if action and "response" in action:
+            task_id = action.get("task_id", getattr(current_obs, "task_id", "unknown"))
+            response = action.get("response", "")
+            action_obj = Action(task_id=task_id, response=response)
+        else:
+            # Generate action using LLM
+            task_id = getattr(current_obs, "task_id", "unknown")
+            prompt = getattr(current_obs, "prompt", "")
+            response = _call_llm(client, task_id, prompt)
+            action_obj = Action(task_id=task_id, response=response)
 
-        response = _call_llm(client, task_id, prompt)
-
-        action = Action(task_id=task_id, response=response)
-
-        current_obs, reward, done, info = env.step(action)
-
+        # Execute step
+        next_obs, reward, done, info = env.step(action_obj)
+        
+        # Update global state
+        current_obs = next_obs
         scores.append(reward.score)
 
+        # Return in standard OpenEnv format
         return {
-            "task_id": task_id,
-            "response": response,
-            "score": reward.score,
-            "done": done
+            "observation": {
+                "task_id": next_obs.task_id,
+                "prompt": next_obs.prompt,
+                "metadata": next_obs.metadata if hasattr(next_obs, 'metadata') else {}
+            },
+            "reward": reward.score,
+            "done": done,
+            "info": info
         }
 
     except Exception as e:
-        return {"error": str(e), "done": True}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/state")
 def state():
-    global scores, done
+    global env, scores, done
+    
+    if env is None:
+        return {
+            "state": {},
+            "done": True,
+            "reward_total": 0.0,
+            "reward_average": 0.0,
+            "steps": 0
+        }
+    
+    env_state = env.state()
     avg = sum(scores) / len(scores) if scores else 0.0
+    
+    # Return in standard OpenEnv format
     return {
+        "state": env_state,
         "done": done,
-        "scores": scores,
-        "average_score": round(avg, 2)
+        "reward_total": sum(scores),
+        "reward_average": round(avg, 2),
+        "steps": len(scores)
+    }
+
+
+@app.get("/info")
+def info():
+    """Additional endpoint that validator might expect"""
+    return {
+        "name": "lexiguard",
+        "version": "1.0.0",
+        "description": "Legal contract review simulation",
+        "tasks": ["clause_identification", "risk_classification", "contract_negotiation"]
     }
 
 
@@ -172,3 +211,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    

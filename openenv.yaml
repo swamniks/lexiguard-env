@@ -9,20 +9,17 @@ tasks:
   - id: clause_identification
     difficulty: easy
     description: "Identify the clause type in a legal contract excerpt"
-    grader:
-      type: python
-      path: env.grader:grade_clause_identification
+    grader: env.grader:grade_clause_identification
+    max_steps: 5
 
   - id: risk_classification
     difficulty: medium
     description: "Classify the risk level of an indemnity clause"
-    grader:
-      type: python
-      path: env.grader:grade_risk_classification
+    grader: env.grader:grade_risk_classification
+    max_steps: 5
 
   - id: contract_negotiation
     difficulty: hard
     description: "Propose redlined revision to reduce supplier liability"
-    grader:
-      type: python
-      path: env.grader:grade_contract_negotiation
+    grader: env.grader:grade_contract_negotiation
+    max_steps: 8
