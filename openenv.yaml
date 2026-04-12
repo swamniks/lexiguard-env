@@ -9,14 +9,17 @@ tasks:
   - id: clause_identification
     difficulty: easy
     description: "Identify the clause type in a legal contract excerpt"
-    grader: env.grader:ClauseIdentificationGrader
+    grader: llm
+    grader_prompt: "Score 0-1 if the response correctly identifies termination clause"
 
   - id: risk_classification
     difficulty: medium
     description: "Classify the risk level of an indemnity clause"
-    grader: env.grader:RiskClassificationGrader
+    grader: llm
+    grader_prompt: "Score 0-1 if the response correctly identifies high risk"
 
   - id: contract_negotiation
     difficulty: hard
     description: "Propose redlined revision to reduce supplier liability"
-    grader: env.grader:ContractNegotiationGrader
+    grader: llm
+    grader_prompt: "Score 0-1 if the response includes liability cap and mutual obligations"
